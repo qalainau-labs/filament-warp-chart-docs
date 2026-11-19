@@ -2,7 +2,7 @@
 
 All notable changes to `qalainau/filament-warp-chart` are documented here.
 
-## [1.0.0] - 2026-11-12
+## [1.0.0] - 2026-11-20
 
 ### Added
 
@@ -19,6 +19,14 @@ All notable changes to `qalainau/filament-warp-chart` are documented here.
 - `->js()`: data worked out in the browser from the fields of the form, so a chart follows every keystroke without a request. `->dataLabels()`: the values written on the bars.
 - `->exportable()`: an Export menu with the chart as a PNG image, its data as CSV, and printing (to save a PDF), all made in the browser.
 - `->pivot()`: a chart of a Warp Pivot (1.8 or later) — its rows as categories and drill-down levels, its columns as series, its values as what is measured.
+  - When the rows are dates (`sold_on:month`, also day, week, quarter and year), the periods without a value are filled with 0, so the axis does not jump (2025-12, then 2026-03). With `->period()` the whole period is filled, otherwise everything between the first and the last period of the data.
+- A value axis in a currency without decimals (`->money('JPY')`, `->money('KRW')`, or `->money('USD', 0)`) counts in whole numbers, also when there is nothing to draw (no more ¥0.2, ¥0.4). Currencies with decimals such as USD are unchanged.
 - A chart that can be clicked says so in one line above it (`->hints(false)` to hide), and a chart with one series names its value axis (`->valueLabel()`).
+- Actual against target: `->bullet()` (a row per category with a bar, a target line and the share reached) and `->gauge()` (a half-circle meter, one per category side by side), with `->bands([60, 90])` and `->maxValue()`. Lay one out per rep with `->groupByRelation('salesRep')` and a target per rep.
+- `->rangeSelector()`: a small chart of the whole period under a date chart; drag across it to choose the period above, with the mouse, by touch or with the keyboard. With a name, the chosen period goes to other charts (`->followRange('period')`) and, through `warp-chart-selected`, to any Livewire component (`ChartRequest::parseRange()`).
+- `->treemap()`: the shares of the total as tiles that drill down like bars.
+- `->heatmap()`: rows × columns in shades of one color. `->perWeekdayAndHour('ordered_at')` (and `Dimension::weekday()`, `Dimension::hour()`) counts the busy hours of the week in the viewer's timezone, on all four databases.
+- `->sankey()` with `->flow('source', 'stage', 'outcome')`: records flowing from step to step; click a band or a box to list its records. `ChartData::flow()` for your own flows.
 - Filament multi-tenancy: query charts are scoped to the current tenant.
 - Ten languages: English, Japanese, German, French, Spanish, Italian, Brazilian Portuguese, Korean, simplified and traditional Chinese.
+- **Static analysis**: the setting methods of the plugin class are declared as returning the plugin, so `$panel->plugin(…::make()->…())` passes Larastan.

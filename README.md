@@ -1,10 +1,10 @@
 # Warp Chart
 
-**Charts for Filament that people can dig into. Put a chart in a form, a page, a widget or the modal of a table action; click a bar to see what is behind it, down to the records; compare with last year; draw the budget as a line; and let a click in one chart filter the others. You write the chart in PHP, next to your fields — there is no dashboard builder to learn and no JavaScript to write.**
+**Charts for Filament that people can dig into. Put a chart in a form, a page, a widget or the modal of a table action; click a bar to see what is behind it, down to the records; compare with last year; draw the budget as a line; let a click in one chart filter the others; show each rep against their target; drag across a small chart to choose the period; and follow leads from source to won or lost. You write the chart in PHP, next to your fields — there is no dashboard builder to learn and no JavaScript to write.**
 
 <a href="https://demo.warpui.com/chart"><img src="https://raw.githubusercontent.com/qalainau-labs/filament-warp-chart-docs/main/art/live-demo.png" alt="Try the live demo: demo.warpui.com/chart" width="592"></a>
 
-Click a month to see its customers, then a customer, down to the orders; click a slice of a donut and watch the other charts follow; type a quote and watch the margin chart move — at **[demo.warpui.com/chart](https://demo.warpui.com/chart)**. No sign-up needed; the data is reset every hour.
+Click a month to see its customers, then a customer, down to the orders; click a slice of a donut and watch the other charts follow; type a quote and watch the margin chart move; drag a period, or click a band of a flow to list its leads — at **[demo.warpui.com/chart](https://demo.warpui.com/chart)**. No sign-up needed; the data is reset every hour.
 
 ![Warp Chart](https://raw.githubusercontent.com/qalainau-labs/filament-warp-chart-docs/main/art/banner.jpg)
 
@@ -27,8 +27,13 @@ Click a month to see its customers, then a customer, down to the orders; click a
 - [Drill-down](#drill-down)
 - [Comparing with last year or the previous period](#comparing-with-last-year-or-the-previous-period)
 - [Budget and target lines](#budget-and-target-lines)
+- [Actual against target: bullet and gauge](#actual-against-target-bullet-and-gauge)
 - [Filters that every chart follows](#filters-that-every-chart-follows)
 - [Linked charts](#linked-charts)
+- [Choosing a period by dragging](#choosing-a-period-by-dragging)
+- [Treemap](#treemap)
+- [Heat map: weekday × hour](#heat-map-weekday--hour)
+- [Flows (Sankey)](#flows-sankey)
 - [Chart types and appearance](#chart-types-and-appearance)
 - [Export](#export)
 - [Loading data later](#loading-data-later)
@@ -55,6 +60,11 @@ Click a month to see its customers, then a customer, down to the orders; click a
 | The budget as a line over the bars | [`->target()`](#budget-and-target-lines) |
 | A date range that every chart on the page follows | [`->period(fn (Get $get) => …)`](#filters-that-every-chart-follows) |
 | Click a category in one chart, see the others narrow down | [`->selectable()`, `->reactsTo()`](#linked-charts) |
+| Each rep's sales against their own target, as bars or meters | [`->bullet()`, `->gauge()`](#actual-against-target-bullet-and-gauge) |
+| Drag across a small chart to choose the period, and the other charts follow | [`->rangeSelector()`, `->followRange()`](#choosing-a-period-by-dragging) |
+| What sales are made of, as tiles you can click into | [`->treemap()`](#treemap) |
+| The busy hours of the week | [`->heatmap()->perWeekdayAndHour()`](#heat-map-weekday--hour) |
+| Inquiries flowing from source to deal to won or lost; click a band for its records | [`->sankey()->flow()`](#flows-sankey) |
 | The chart as an image, a CSV file or a PDF | [`->exportable()`](#export) |
 | A chart of a pivot you already defined in Warp Pivot | [`->pivot()`](#charts-from-a-warp-pivot) |
 | A margin chart that changes as someone types a quote | [`->data(fn (Get $get) => …)`](#charts-from-your-own-data) |
@@ -408,6 +418,7 @@ WarpChart::make('here')
 - The row headings of the pivot are the categories. Its column headings are the series; a pivot without columns gives one series per value.
 - A pivot with more than one row level can be drilled into: a click opens the next row level, with the usual path and Back button.
 - Values that only the pivot has — medians, ratios, formulas, distinct counts — can be charted this way.
+- When the rows of the pivot are dates (`:day`, `:week`, `:month`, `:quarter`, `:year`), the periods without a value are filled with 0 so the axis does not jump, as `perMonth()` does. With `->period()` the whole period is filled; without it, everything between the first and the last period of the data.
 - Given a class, the pivot is built without mounting the component: its filters have their default values, and a `pivot()` that depends on `mount()` arguments cannot be used. Pass a closure when the chart sits in the component that has the pivot.
 - Needs Warp Pivot 1.8 or later. Warp Chart does not require Warp Pivot; without it, do not call `->pivot()`.
 
@@ -473,6 +484,47 @@ The comparison is drawn lighter next to the bars (dashed for lines), and the too
 - The tooltip shows the share reached: *93% of Budget ($120,000.00)*. A number chart shows a progress bar.
 - Call `->target()` more than once for several lines.
 
+## Actual against target: bullet and gauge
+
+![One row per sales rep: a bar for last month's sales, a line for the rep's own target, and gray bands at 60% and 90% of it](https://raw.githubusercontent.com/qalainau-labs/filament-warp-chart-docs/main/art/goals.png)
+
+Two ways to show how far each rep, store or month got towards its goal:
+
+```php
+// One row per rep: a bar for the sales, a line for the target
+WarpChart::make('reps')
+    ->bullet()->money('USD')
+    ->bands([60, 90])
+    ->query(Order::class)
+    ->groupByRelation('salesRep')
+    ->sum('total', 'Sales')
+    ->periodColumn('ordered_at')->period(now()->startOfMonth(), now())
+    ->target(fn () => SalesRep::query()->pluck('monthly_target', 'id')->all(), 'Target')
+
+// A half-circle meter: this year against the budget of the year
+WarpChart::make('year')
+    ->gauge()->money('USD')
+    ->query(Order::class)
+    ->perYear('ordered_at')
+    ->sum('total', 'Sales')
+    ->period(now()->startOfYear(), now())
+    ->target(fn () => Budget::query()->whereYear('month', now()->year)->sum('amount'), 'Budget')
+```
+
+| Method | |
+| --- | --- |
+| `->bullet()` | One row per category: the first series as a bar, the target as a short vertical line, a comparison (`->compareToPreviousYear()`) as a thin bar under it, and on the right the value and the share of the target (*$19K · 133.5%*). The line turns green when the target is reached. |
+| `->gauge()` | A half-circle meter per category. With one category it is drawn large, with more they are laid out side by side and wrap on narrow screens. The middle shows the value and *81.1% of Budget*. |
+| `->target()` | A number for the same target on every row, or an array keyed by category key for a target per row. With `groupByRelation()` the keys are the ids of the related records, so `pluck('monthly_target', 'id')` fits. |
+| `->bands([60, 90])` | Shades behind the bar or the meter, as percentages of each row's target: up to 60%, up to 90%, and the rest. Up to five numbers. Nothing is drawn without a target. |
+| `->maxValue(100)` | Where the scale ends. Without it, a bullet chart ends at a round number above the largest value and target (all rows share the scale), and a meter at a round number about a quarter above its target; with `->percent()` and values up to 100, at 100. |
+
+- The height follows the number of rows (bullet) or meters (gauge); `->height()` only sets the size of a single meter.
+- A row or a meter can be clicked like a bar: with `->drillDown()` or `->drillToRecords()` a click on a rep lists their orders, with `->selectable()` it filters the other charts.
+- A grouping that is not by date (`groupByRelation()`) applies the period only with `->periodColumn()`; without it the chart adds up all the records.
+
+![A half-circle meter for every rep, each with the share of the target in the middle and a green mark when it is reached](https://raw.githubusercontent.com/qalainau-labs/filament-warp-chart-docs/main/art/gauges.png)
+
 ## Filters that every chart follows
 
 A chart reads the form it sits in through `Get $get`. Put live fields above the charts, and every chart that reads them is fetched again when they change:
@@ -536,6 +588,112 @@ public function filterTable(string $name, ?string $key, ?string $label): void
 
 Selections come from the browser. Use them as values in queries, as above; do not use them to decide what someone may see.
 
+## Choosing a period by dragging
+
+![Weekly sales with a small chart of three years under it; the dragged window chooses the weeks above, and a donut and a total beside it follow](https://raw.githubusercontent.com/qalainau-labs/filament-warp-chart-docs/main/art/range.png)
+
+`->rangeSelector()` puts a small chart of the whole period under a date chart. Drag across it, and the chart above shows only those days, weeks or months. Nothing is asked from the server while dragging.
+
+```php
+WarpChart::make('weekly')
+    ->bar()->money('USD')
+    ->rangeSelector('period', visible: 13)       // start with the last 13 weeks
+    ->query(Order::class)
+    ->perWeek('ordered_at')
+    ->sum('total', 'Sales')
+    ->period('2025-01-01', now()),
+
+// These charts are fetched again with the weeks chosen above
+WarpChart::make('byCategory')
+    ->donut()->money('USD')
+    ->followRange('period')
+    ->query(Order::class)->groupBy('category')->sum('total')
+    ->periodColumn('ordered_at')->period('2025-01-01', now()),
+```
+
+| Method | |
+| --- | --- |
+| `->rangeSelector(?string $name = null, ?int $visible = null, int $height = 56)` | The small chart and its window. `$name` passes the chosen period to other charts and components; without it, only the chart above changes. `$visible` is the number of buckets shown at first (the last ones); without it, all. `$height` is the height of the small chart in pixels (32–160). |
+| `->followRange('period')` | Use the period chosen in that selector instead of `->period()`. Until something is chosen, the chart uses its own period. |
+
+- Drag across the small chart to choose a new period, drag the window to move it, drag its edges to make it longer or shorter, double-click to go back to the start. With the keyboard: Tab to the window or an edge, then the arrow keys, Home and End.
+- The chosen period is shown above the small chart and as a badge on the charts that follow it; the × on the badge brings every chart back.
+- The period is sent as a key like `2026-03-01..2026-06-30` — the first day of the first bucket to the last day of the last bucket. Other Livewire components get it through the event `warp-chart-selected` (see [Linked charts](#linked-charts)); `ChartRequest::parseRange($key)` turns it into `['2026-03-01', '2026-06-30']`, or `null` for anything else:
+
+```php
+#[On('warp-chart-selected')]
+public function followPeriod(string $name, ?string $key, ?string $label): void
+{
+    if ($name === 'period') {
+        [$this->from, $this->until] = ChartRequest::parseRange($key) ?? [null, null];
+    }
+}
+```
+
+- Choosing the whole period counts as choosing nothing: the followers go back to their own period. With `$visible`, the followers keep their own period until someone drags, so give them the same period as the window if they should match from the start.
+- The selector is for bar, line and area charts with at least two categories. It is hidden while the chart is drilled down.
+- The key comes from the browser. `parseRange()` only accepts real dates; use them as bound values as with any other selection.
+
+## Treemap
+
+![Sales by category as tiles, the largest first, each with its value and share](https://raw.githubusercontent.com/qalainau-labs/filament-warp-chart-docs/main/art/treemap.png)
+
+```php
+WarpChart::make('mix')
+    ->treemap()->money('USD')
+    ->query(Order::class)->groupBy('category')->sum('total', 'Sales')
+    ->drillDown(Dimension::relation('customer')->label('Customer'))
+    ->drillToRecords(['number' => 'Order', RecordColumn::make('total')->money('USD')])
+```
+
+`->treemap()` draws the first series as tiles whose areas are the shares of the total, the largest first. A tile that is large enough shows its name, its value and its share. Clicking a tile drills down exactly like a bar ([Drill-down](#drill-down)), so the tiles of a category become the tiles of its customers, then the list of orders. `->selectable()` works too. Values of zero or less are not drawn; the colors follow `->colors()` like the slices of a pie.
+
+## Heat map: weekday × hour
+
+![Orders by weekday and hour of the day: the cells of weekday late mornings are the darkest](https://raw.githubusercontent.com/qalainau-labs/filament-warp-chart-docs/main/art/heatmap.png)
+
+```php
+WarpChart::make('busy')
+    ->heatmap()->valueLabel('Orders')
+    ->query(Order::class)
+    ->perWeekdayAndHour('ordered_at')
+    ->count('Orders')
+    ->period(now()->subMonths(3), now())
+```
+
+`->heatmap()` draws the categories as rows and the series as columns, and the larger a value, the darker its cell. `->perWeekdayAndHour('ordered_at')` gives seven rows (Monday to Sunday, or from `->weekStartsOn()`) and 24 columns (0:00 to 23:00), and adds up every Monday 14:00 of the period.
+
+- Weekdays and hours are taken in the viewer's timezone, like days ([Period and timezone](#period-and-timezone)): an order stored at 23:30 UTC on a Monday counts for Tuesday 8:00 in Tokyo. Their names follow the language of the viewer (*Mon*, *2 PM*, *14 Uhr*).
+- The parts can be used on their own: `->groupBy(Dimension::weekday('ordered_at'))` (one row per weekday, with any measure), `->groupBy(Dimension::weekday('ordered_at'))->splitBy('category')` (weekday × category). `Dimension::hour()` as `splitBy()` needs the rows to be weekdays or hours of the same column.
+- Any other grouping becomes a heat map too, e.g. `->groupBy('region')->splitBy('category')`. A heat map shows up to 40 columns; other chart types split into eight series and “Other”.
+- From your own data, the labels are the rows and each `->series()` is a column.
+- Cells show their numbers when every number fits; otherwise point at a cell (or Tab to it and use the arrow keys) to read it. A heat map cannot be clicked into.
+
+## Flows (Sankey)
+
+![Inquiries flowing from five sources to meeting, quote sent or no reply, then to won or lost, with the tooltip of the band from Meeting to Won](https://raw.githubusercontent.com/qalainau-labs/filament-warp-chart-docs/main/art/flow.png)
+
+```php
+WarpChart::make('pipeline')
+    ->sankey()->height(340)
+    ->valueLabel('Inquiries')
+    ->colors(['Won' => '#1baf7a', 'Lost' => '#e34948'])
+    ->query(Lead::class)
+    ->flow('source', 'stage', 'outcome')
+    ->count('Inquiries')
+    ->drillToRecords(['company' => 'Company', 'source', 'stage', 'outcome', 'created_at' => 'Received'])
+```
+
+`->sankey()` with `->flow()` follows every record through the columns you list, left to right: from its source, to how far the deal got, to won or lost. Boxes are the values of a step, as tall as the records that reached them; bands are as thick as the records that went from one value to the next.
+
+- `->flow()` takes two or more columns, or `Dimension::relation('salesRep')` and `Dimension::make('status')->labels([...])` for names. Enums and labels keep their order; other values are sorted from the largest.
+- A record whose value is empty at a step stops there — an inquiry that is still open has no outcome, so it ends at its stage.
+- The value is `->count()` or `->sum('amount')`; averages cannot be added along a flow.
+- With `->drillToRecords()`, a click on a band lists the records that went that way (*Meeting → Won*), a click on a box the records with that value. Back and the path work as in [Drill-down](#drill-down). Without it, the chart only shows the numbers.
+- The period applies with `->periodColumn('created_at')->period(...)`.
+- From your own data: `ChartData::make()->flow('Budget', 'Sales', 60)->flow('Sales', 'Travel', 25)`. The steps are worked out from the flows; flows that would go round in a circle are left out. These bands cannot be clicked.
+- The tooltip of a band gives its share of the box it comes from (*34.2% of Meeting*). A flow chart has no legend; `->colors()` by name colors the boxes and the bands that leave them.
+
 ## Chart types and appearance
 
 | Method | |
@@ -545,7 +703,11 @@ Selections come from the browser. Use them as values in queries, as above; do no
 | `->area()` | Filled lines; `->stacked()` stacks them. |
 | `->pie()`, `->donut()` | The first series as shares. The donut shows the total in the middle; the legend shows the percentages. |
 | `->stat()` | A big number: the sum of the first series, the change against the comparison, progress towards the target, and a small trend line. |
-| `->type(fn (Get $get) => $get('type'))` | Choose the type at runtime (`'bar'`, `'line'`, `'area'`, `'pie'`, `'donut'`, `'stat'` or the `ChartType` enum). |
+| `->bullet()`, `->gauge()` | The first series against its target, per category. See [Actual against target](#actual-against-target-bullet-and-gauge). |
+| `->treemap()` | The first series as tiles. See [Treemap](#treemap). |
+| `->heatmap()` | Rows × columns as shades of one color. See [Heat map](#heat-map-weekday--hour). |
+| `->sankey()` | Flows between steps. See [Flows](#flows-sankey). |
+| `->type(fn (Get $get) => $get('type'))` | Choose the type at runtime (`'bar'`, `'line'`, `'area'`, `'pie'`, `'donut'`, `'stat'`, `'bullet'`, `'gauge'`, `'treemap'`, `'heatmap'`, `'sankey'` or the `ChartType` enum). |
 
 Bars and a line in one chart: give one series its own type in `ChartData`: `->series('Cancelled', [...], type: 'line')`.
 
@@ -587,7 +749,7 @@ An “Export” menu appears above the chart:
 
 - Everything is made in the browser from what is on the screen: the level the viewer drilled to, the series they left visible, the filters in effect.
 - The file is named after the heading of the chart (or of the section it sits in), the drill-down path and the date.
-- A number (`->stat()`) and a record list can only be exported as data.
+- A number (`->stat()`) and a record list can only be exported as data. The CSV of a flow chart has one line per band (*Meeting → Won*).
 - The CSV holds the numbers the chart shows, so give the menu only to people who may take them away. Names that begin with `=`, `+`, `-` or `@` are written as text, so a spreadsheet does not run them as formulas.
 
 ## Loading data later
@@ -637,6 +799,7 @@ Charts built with `->data()` are yours to scope.
 - After a drill-down, focus moves to **Back**; after going back, to the first mark.
 - Series are told apart by more than color: comparisons are lighter and dashed, targets are dashed lines, and the legend names each one.
 - On touch screens the first tap shows the values, the second tap on the same mark drills down or selects.
+- The cells of a heat map are reached with Tab and moved between with the arrow keys in both directions. The window of a range selector and its two edges are sliders: the arrow keys move them, and a screen reader hears the period they cover.
 
 ## Testing
 
@@ -660,7 +823,7 @@ it('charts the sales of the year', function () {
 });
 ```
 
-`getPayload()` returns `type`, `categories` (`key`, `label`), `series` (`label`, `values`, `role`: `main`, `compare` or `target`), `targets`, `records`, `path`, `depth`, `drillable` and `empty`.
+`getPayload()` returns `type`, `categories` (`key`, `label`), `series` (`label`, `values`, `role`: `main`, `compare` or `target`), `targets`, `records`, `path`, `depth`, `drillable` and `empty`; for a flow chart also `nodes` (`key`, `label`, `step`, `value`) and `links` (`source`, `target` — positions in `nodes` — `value` and `key`). The key of a band is what a click sends back: `fetchChart(['state' => ['drill' => [$link['key']]]])` returns its records.
 
 ## Requirements
 
@@ -673,6 +836,9 @@ it('charts the sales of the year', function () {
 
 Before each release, the full test suite runs on PHP 8.3, 8.4 and 8.5 × Laravel 12 and 13 × SQLite, MySQL, MariaDB and PostgreSQL, with each database at its newest and its oldest supported version. A version is released only when every combination passes.
 [See the results for each release](https://github.com/qalainau-labs/filament-warp-chart-docs/tree/main/test-runs).
+
+## Static analysis (PHPStan / Larastan)
+The setting methods of the plugin class return the plugin, so `$panel->plugin(FilamentWarpChartPlugin::make()->timezone('Asia/Tokyo'))` passes analysis as it is (no “expects Filament\Contracts\Plugin” error).
 
 ## Support
 
