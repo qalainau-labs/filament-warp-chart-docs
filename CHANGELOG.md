@@ -2,6 +2,12 @@
 
 All notable changes to `qalainau/filament-warp-chart` are documented here.
 
+## [1.0.1] - 2026-11-20
+
+### Fixed
+
+- Japanese and Chinese (Simplified and Traditional) texts no longer put a space between a name or a number and the characters next to it: “予算の95%” instead of “予算 の 95%” in tooltips, the text for screen readers, the share of a target and the flow bands. Korean keeps the space between words.
+
 ## [1.0.0] - 2026-11-20
 
 ### Added
